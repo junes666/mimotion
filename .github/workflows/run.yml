@@ -1,37 +1,47 @@
 name: 刷步数
 
 on:
-  #push:
-  #  branches: [ main ]
-  #pull_request:
-  #  branches: [ main ]
   schedule:
-    - cron: '24 0,4,7,10,12,14 * * *'
-  watch:
-    types: started
+    # UTC 00:24/04:24/07:24/10:24/12:24/14:24 = 北京时间 08:24/12:24/15:24/18:24/20:24/22:24
+    - cron: "24 0,4,7,10,12,14 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: mimotion
+  cancel-in-progress: false
+
 jobs:
-  build:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MI_USER: ${{ secrets.USER }}
+      MI_PASSWORD: ${{ secrets.PWD }}
+      OPEN_GET_WEATHER: ${{ secrets.OPEN_GET_WEATHER }}
+      AREA: ${{ secrets.AREA }}
     steps:
-      - name: Checkout codes
-        uses: actions/checkout@v2
-      - name: Update system and install zsh
-        run: |
-          sudo -E apt-get -qq update
-          sudo -E apt-get install zsh -y
-          
-      - name: 初始化Python
-        uses: actions/setup-python@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.8
-          
-      - name: 开始
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --requirement requirements.txt
+
+      - name: Validate configuration
+        shell: bash
         run: |
-          pip3 install requests
-          user='${{ secrets.USER }}'
-          passwd='${{ secrets.PWD }}' 
-          open_get_weather='${{ secrets.OPEN_GET_WEATHER }}'
-          area='${{ secrets.AREA }}'
-          python3 main.py ${user} ${passwd} ${open_get_weather} ${area}
+          test -n "$MI_USER" || { echo "缺少仓库 Secret: USER"; exit 1; }
+          test -n "$MI_PASSWORD" || { echo "缺少仓库 Secret: PWD"; exit 1; }
+          test -n "$OPEN_GET_WEATHER" || { echo "缺少仓库 Secret: OPEN_GET_WEATHER"; exit 1; }
+          test -n "$AREA" || { echo "缺少仓库 Secret: AREA"; exit 1; }
+
+      - name: Run
+        run: python main.py "$MI_USER" "$MI_PASSWORD" "$OPEN_GET_WEATHER" "$AREA"
